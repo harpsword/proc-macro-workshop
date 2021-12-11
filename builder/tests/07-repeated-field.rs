@@ -49,6 +49,7 @@ fn main() {
         .build()
         .unwrap();
 
+    println!("{}", command.executable);
     assert_eq!(command.executable, "cargo");
     assert_eq!(command.args, vec!["build", "--release"]);
 }

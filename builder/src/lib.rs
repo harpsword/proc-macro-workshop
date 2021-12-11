@@ -2,10 +2,9 @@ use proc_macro::{TokenStream};
 use syn::{self, punctuated::Punctuated, spanned::Spanned};
 use quote::quote;
 
-#[proc_macro_derive(Builder)]
+#[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let st = syn::parse_macro_input!(input as syn::DeriveInput);
-    // eprintln!("{:#?}", &st);
     match do_expand(&st) {
         Ok(token_stream) => {
             
@@ -146,26 +145,60 @@ fn generate_build_func(fields: &StructFields, struct_ident: &syn::Ident) -> syn:
     Ok(func_define)
 }
 
+fn get_user_specified_ident_for_vec(field: &syn::Field) -> Option<syn::Ident> {
+    for attr in &field.attrs {
+        if let Ok(syn::Meta::List(syn::MetaList {
+            ref path,
+            ref nested,
+            ..
+        })) = attr.parse_meta()
+        {
+            if let Some(p) = path.segments.first() {
+                if p.ident == "builder" {
+                    if let Some(syn::NestedMeta::Meta(syn::Meta::NameValue(kv))) = nested.first() {
+                        if kv.path.is_ident("each") {
+                            if let syn::Lit::Str(ref ident_str) = kv.lit {
+                                return Some(syn::Ident::new(
+                                    ident_str.value().as_str(),
+                                    attr.span(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn generate_builder_struct_setter(fields: &StructFields) -> syn::Result<Vec<proc_macro2::TokenStream>>{
     let func_clauses: Vec<_> = fields.iter().map(|f| {
         let ident = &f.ident;
         let mut type_ = &f.ty;
         if let Some(inner_type) = get_vec_inner_type(&f.ty) {
-            let literal = &f.ident.clone().unwrap().to_string();
-            let literal_sub = &literal[..literal.len()-1].to_string();
-            let ident_sub = syn::Ident::new(literal_sub, ident.span());
+            let literal = f.ident.clone().unwrap().to_string();
 
-            // let tmp = literal_byte.in[:literal_byte.len()]
+            if let Some(each_ident) = get_user_specified_ident_for_vec(f) {
+                if each_ident.to_string() != literal {
+                    return quote! {
+                        fn #each_ident(&mut self, #each_ident: #inner_type) -> &mut Self {
+                            self.#ident.push(#each_ident);
+                            self
+                        }
+                        fn #ident(&mut self, #ident: #type_) -> &mut Self {
+                            self.#ident = #ident;
+                            self
+                        } 
+                    }
+                }
+            }
+
             return quote! {
-                // fn #ident_sub(&mut self, #ident_sub: #type_) -> &mut Self {
-                //     self.#ident.push(#ident_sub);
-                //     self
-                // }
-
                 fn #ident(&mut self, #ident: #type_) -> &mut Self {
                     self.#ident = #ident;
                     // self.#ident.push(#ident);
-                    return self
+                    self
                 }
             }
         }

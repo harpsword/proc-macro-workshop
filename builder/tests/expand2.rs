@@ -6,22 +6,24 @@ extern crate std;
 use derive_builder::Builder;
 pub struct Command {
     executable: String,
+    #[builder(each = "arg")]
     args: Vec<String>,
+    #[builder(each = "env")]
     env: Vec<String>,
     current_dir: Option<String>,
 }
 pub struct CommandBuilder {
     executable: std::option::Option<String>,
-    args: std::option::Option<Vec<String>>,
-    env: std::option::Option<Vec<String>>,
+    args: std::vec::Vec<String>,
+    env: std::vec::Vec<String>,
     current_dir: std::option::Option<String>,
 }
 impl Command {
     pub fn builder() -> CommandBuilder {
         CommandBuilder {
             executable: std::option::Option::None,
-            args: std::option::Option::None,
-            env: std::option::Option::None,
+            args: std::vec::Vec::<String>::new(),
+            env: std::vec::Vec::<String>::new(),
             current_dir: std::option::Option::None,
         }
     }
@@ -45,69 +47,28 @@ impl CommandBuilder {
             };
             return std::result::Result::Err(err.into());
         }
-        if self.args.is_none() {
-            let err = {
-                let res = ::alloc::fmt::format(::core::fmt::Arguments::new_v1(
-                    &["", " is missing"],
-                    &match (&"args",) {
-                        _args => [::core::fmt::ArgumentV1::new(
-                            _args.0,
-                            ::core::fmt::Display::fmt,
-                        )],
-                    },
-                ));
-                res
-            };
-            return std::result::Result::Err(err.into());
-        }
-        if self.env.is_none() {
-            let err = {
-                let res = ::alloc::fmt::format(::core::fmt::Arguments::new_v1(
-                    &["", " is missing"],
-                    &match (&"env",) {
-                        _args => [::core::fmt::ArgumentV1::new(
-                            _args.0,
-                            ::core::fmt::Display::fmt,
-                        )],
-                    },
-                ));
-                res
-            };
-            return std::result::Result::Err(err.into());
-        }
-        if self.current_dir.is_none() {
-            let err = {
-                let res = ::alloc::fmt::format(::core::fmt::Arguments::new_v1(
-                    &["", " is missing"],
-                    &match (&"current_dir",) {
-                        _args => [::core::fmt::ArgumentV1::new(
-                            _args.0,
-                            ::core::fmt::Display::fmt,
-                        )],
-                    },
-                ));
-                res
-            };
-            return std::result::Result::Err(err.into());
-        }
         std::result::Result::Ok(Command {
             executable: self.executable.clone().unwrap(),
-            args: self.args.clone().unwrap(),
-            env: self.env.clone().unwrap(),
-            current_dir: self.current_dir.clone().unwrap(),
+            args: self.args.clone(),
+            env: self.env.clone(),
+            current_dir: self.current_dir.clone(),
         })
     }
     fn executable(&mut self, executable: String) -> &mut Self {
         self.executable = std::option::Option::Some(executable);
         self
     }
-    fn args(&mut self, args: Vec<String>) -> &mut Self {
-        self.args = std::option::Option::Some(args);
+    fn arg(&mut self, arg: String) -> &mut Self {
+        self.args.push(arg);
         self
     }
+    fn args(&mut self, args: Vec<String>) -> &mut Self {
+        self.args = args;
+        return self;
+    }
     fn env(&mut self, env: Vec<String>) -> &mut Self {
-        self.env = std::option::Option::Some(env);
-        self
+        self.env = env;
+        return self;
     }
     fn current_dir(&mut self, current_dir: String) -> &mut Self {
         self.current_dir = std::option::Option::Some(current_dir);
@@ -117,27 +78,38 @@ impl CommandBuilder {
 fn main() {
     let command = Command::builder()
         .executable("cargo".to_owned())
-        .args(<[_]>::into_vec(box [
-            "build".to_owned(),
-            "--release".to_owned(),
-        ]))
-        .env(::alloc::vec::Vec::new())
+        .arg("build".to_owned())
+        .arg("--release".to_owned())
         .build()
         .unwrap();
-    if !command.current_dir.is_none() {
-        ::core::panicking::panic("assertion failed: command.current_dir.is_none()")
+    {
+        match (&command.executable, &"cargo") {
+            (left_val, right_val) => {
+                if !(*left_val == *right_val) {
+                    let kind = ::core::panicking::AssertKind::Eq;
+                    ::core::panicking::assert_failed(
+                        kind,
+                        &*left_val,
+                        &*right_val,
+                        ::core::option::Option::None,
+                    );
+                }
+            }
+        }
     };
-    let command = Command::builder()
-        .executable("cargo".to_owned())
-        .args(<[_]>::into_vec(box [
-            "build".to_owned(),
-            "--release".to_owned(),
-        ]))
-        .env(::alloc::vec::Vec::new())
-        .current_dir("..".to_owned())
-        .build()
-        .unwrap();
-    if !command.current_dir.is_some() {
-        ::core::panicking::panic("assertion failed: command.current_dir.is_some()")
+    {
+        match (&command.args, &<[_]>::into_vec(box ["build", "--release"])) {
+            (left_val, right_val) => {
+                if !(*left_val == *right_val) {
+                    let kind = ::core::panicking::AssertKind::Eq;
+                    ::core::panicking::assert_failed(
+                        kind,
+                        &*left_val,
+                        &*right_val,
+                        ::core::option::Option::None,
+                    );
+                }
+            }
+        }
     };
 }
