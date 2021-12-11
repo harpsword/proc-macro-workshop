@@ -47,15 +47,8 @@ fn do_expand(st: &syn::DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             #(#buidler_struct_setter)*
         }
     };                     // ----------------------------------+    
-    // print_types_for_debug(fields);
 
     Ok(ret)
-}
-
-fn print_types_for_debug(fields: &StructFields) {
-    for f in fields.iter() {
-        eprintln!("{:#?}", f);
-    }
 }
 
 fn get_inner_type(ty: &syn::Type, ident: String) -> Option<&syn::Type> {
@@ -145,7 +138,7 @@ fn generate_build_func(fields: &StructFields, struct_ident: &syn::Ident) -> syn:
     Ok(func_define)
 }
 
-fn get_user_specified_ident_for_vec(field: &syn::Field) -> Option<syn::Ident> {
+fn get_user_specified_ident_for_vec(field: &syn::Field) -> syn::Result<Option<syn::Ident>> {
     for attr in &field.attrs {
         if let Ok(syn::Meta::List(syn::MetaList {
             ref path,
@@ -158,10 +151,17 @@ fn get_user_specified_ident_for_vec(field: &syn::Field) -> Option<syn::Ident> {
                     if let Some(syn::NestedMeta::Meta(syn::Meta::NameValue(kv))) = nested.first() {
                         if kv.path.is_ident("each") {
                             if let syn::Lit::Str(ref ident_str) = kv.lit {
-                                return Some(syn::Ident::new(
-                                    ident_str.value().as_str(),
-                                    attr.span(),
-                                ));
+                                return Ok(
+                                    Some(syn::Ident::new(
+                                        ident_str.value().as_str(),
+                                        attr.span(),
+                                    ))
+                                );
+                            }
+                        } else {
+                            // 第八关加入，注意这里new_spanned函数的参数，我们需要在语法树中找到一个合适的节点来获取它的span，如果这个语法树节点找的不对，产生出的错误信息就会不一样
+                            if let Ok(syn::Meta::List(ref list)) = attr.parse_meta() {
+                                return Err(syn::Error::new_spanned(list, r#"expected `builder(each = "...")`"#))
                             }
                         }
                     }
@@ -169,19 +169,19 @@ fn get_user_specified_ident_for_vec(field: &syn::Field) -> Option<syn::Ident> {
             }
         }
     }
-    None
+    Ok(None)
 }
 
 fn generate_builder_struct_setter(fields: &StructFields) -> syn::Result<Vec<proc_macro2::TokenStream>>{
-    let func_clauses: Vec<_> = fields.iter().map(|f| {
+    let func_clauses: syn::Result<Vec<_>> = fields.iter().map(|f| {
         let ident = &f.ident;
         let mut type_ = &f.ty;
         if let Some(inner_type) = get_vec_inner_type(&f.ty) {
             let literal = f.ident.clone().unwrap().to_string();
 
-            if let Some(each_ident) = get_user_specified_ident_for_vec(f) {
+            if let Some(each_ident) = get_user_specified_ident_for_vec(f)? {
                 if each_ident.to_string() != literal {
-                    return quote! {
+                    return Ok(quote! {
                         fn #each_ident(&mut self, #each_ident: #inner_type) -> &mut Self {
                             self.#ident.push(#each_ident);
                             self
@@ -190,27 +190,27 @@ fn generate_builder_struct_setter(fields: &StructFields) -> syn::Result<Vec<proc
                             self.#ident = #ident;
                             self
                         } 
-                    }
+                    })
                 }
             }
 
-            return quote! {
+            return Ok(quote! {
                 fn #ident(&mut self, #ident: #type_) -> &mut Self {
                     self.#ident = #ident;
                     // self.#ident.push(#ident);
                     self
                 }
-            }
+            })
         }
         type_ = get_optional_inner_type(&f.ty).or(Some(&f.ty)).unwrap();
-        quote! {
+        Ok(quote! {
             fn #ident(&mut self, #ident: #type_) -> &mut Self {
                 self.#ident = std::option::Option::Some(#ident);
                 self
             }
-        }
+        })
     }).collect();
-    Ok(func_clauses)
+    func_clauses
 }
 
 fn generate_builder_struct_factory_init_clauses(fields: &StructFields) -> syn::Result<Vec<proc_macro2::TokenStream>>{
